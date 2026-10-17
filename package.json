@@ -1,0 +1,34 @@
+{
+  "name": "git-dna",
+  "version": "0.1.1",
+  "description": "Reads a repository's commit history and tells you what kind of committer lives there.",
+  "bin": {
+    "git-dna": "bin/git-dna.js"
+  },
+  "files": [
+    "bin"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "git",
+    "wrapped",
+    "cli",
+    "stats",
+    "developer",
+    "personality",
+    "readme",
+    "svg"
+  ],
+  "license": "MIT",
+  "author": "Manraj",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Manraj10/git-dna.git"
+  },
+  "homepage": "https://github.com/Manraj10/git-dna#readme",
+  "bugs": {
+    "url": "https://github.com/Manraj10/git-dna/issues"
+  }
+}
