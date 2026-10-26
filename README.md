@@ -34,12 +34,13 @@ git-dna                          # current repository
 git-dna ../some-repo             # another repository
 git-dna --me                     # only commits matching your git config user.email
 git-dna --author "Ada Lovelace"  # only commits whose author name or email contains this text
-git-dna --since 2025-01-01       # a year in review
+git-dna --since 2025-01-01 --until 2025-12-31   # a year in review
 git-dna --json                   # raw numbers, for scripts
 git-dna --no-card                # terminal report only
 git-dna --no-png                 # SVG card only
 git-dna --no-open                # don't pop the PNG open or copy it
 git-dna --out card.svg           # write the card somewhere else
+git-dna --version                # print the version
 ```
 
 To show your card on your profile, commit it and reference it:
@@ -59,17 +60,17 @@ Each archetype has a threshold. The one the repo clears by the widest margin win
 | Weekend Warrior | 25% of commits on Saturday or Sunday |
 | Firefighter | 30% of messages mention a fix or bug |
 | Friday Deployer | 10% of commits after 4pm on a Friday |
-| Monolith Mover | 350 lines changed per commit on average |
-| Surgeon | 18 lines or fewer per commit on average, with 30+ commits |
+| Monolith Mover | 350 lines changed per commit on average, with a typical (median) commit of 100+ |
+| Surgeon | 18 lines or fewer per commit on average (wins from about 22), with 30+ commits |
 | Novelist | messages average 60+ characters |
 | Silent Committer | 20% of messages are a single word |
 | Streak Machine | a 21-day streak |
 | 9-to-5 Professional | 90% of commits on weekdays between 9am and 6pm |
 | Emoji Enthusiast | 12% of messages have an emoji, with 20+ commits |
-| Conventionalist | 60% of messages start with feat:, fix: and friends, with 20+ commits |
+| Conventionalist | 50% of messages start with feat:, fix: and friends, with 20+ commits |
 | Committee | 12+ authors and nobody owns more than 60% of commits |
-| Comeback Kid | went quiet for 90 days, with 5+ commits before and after |
-| Deadline Crammer | 50% of commits on the 2 busiest days, with 10+ active days over at least 2 weeks |
+| Comeback Kid | went quiet for 90 days (and at least 15% of the repo's life), with 5+ commits before and after |
+| Deadline Crammer | 50% of commits on the 2 busiest days, with 15+ commits and 10+ active days over at least 2 weeks |
 | Rage Committer | 4% of messages swear, at least 3 times |
 | One-File Wonder | 60% of commits touch the same file (lockfiles and READMEs don't count), with 20+ commits |
 

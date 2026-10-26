@@ -17,10 +17,14 @@ const flags = new Set();
 const values = {};
 const positional = [];
 for (let i = 0; i < args.length; i++) {
-  const a = args[i];
+  // Accept git's --since=2025-01-01 style as well as --since 2025-01-01.
+  const eq = args[i].startsWith('--') ? args[i].indexOf('=') : -1;
+  const a = eq > 0 ? args[i].slice(0, eq) : args[i];
   if (BOOL_FLAGS.includes(a)) flags.add(a);
   else if (VALUE_FLAGS.includes(a)) {
-    if (args[i + 1] === undefined) fail(`${a} needs a value.`);
+    if (eq > 0) { values[a] = args[i].slice(eq + 1); continue; }
+    const next = args[i + 1];
+    if (next === undefined || BOOL_FLAGS.includes(next) || VALUE_FLAGS.includes(next)) fail(`${a} needs a value.`);
     values[a] = args[++i];
   } else if (a.startsWith('-')) fail(`Unknown option ${a}. Run git-dna --help.`);
   else positional.push(a);
@@ -90,7 +94,7 @@ if (flag('--me')) {
 const RS = '\x1e', US = '\x1f';
 // quotepath=false keeps non-ASCII file names readable instead of octal-escaped.
 const logArgs = ['-c', 'core.quotepath=false', 'log', '--no-merges', '--numstat', '--date=format:%Y-%m-%d|%H|%u|%M',
-  `--pretty=format:${RS}%H${US}%an${US}%ae${US}%ad${US}%s`];
+  `--pretty=format:${RS}%H${US}%aN${US}%aE${US}%ad${US}%s`]; // %aN/%aE apply the repo's .mailmap
 if (authorFilter) logArgs.push(`--author=${authorFilter}`, '--regexp-ignore-case', '--fixed-strings');
 if (opt('--since')) logArgs.push(`--since=${opt('--since')}`);
 if (opt('--until')) logArgs.push(`--until=${opt('--until')}`);
@@ -131,7 +135,8 @@ for (const chunk of raw.split(RS)) {
     files.push({ file: renamedTo(m[3]), a, d });
   }
   // Control characters are dropped so a hostile commit message can't drive the terminal.
-  commits.push({ hash, name, email, day, hour: +hour, minute: +minute, dow: +dow, subject: subject.replace(/[\x00-\x1f\x7f-\x9f]/g, ''), add, del, files });
+  const clean = (x) => x.replace(/[\x00-\x1f\x7f-\x9f]/g, '');
+  commits.push({ hash, name: clean(name), email, day, hour: +hour, minute: +minute, dow: +dow, subject: clean(subject), add, del, files });
 }
 
 // numstat writes renames as "old => new" or "dir/{old => new}/file"; keep the new path.
@@ -176,7 +181,7 @@ const SWEAR = /\b(fuck\w*|shit\w*|damn\w*|crap|wtf|ffs)\b(?!::)/i;
 const EMOJI = /\p{Extended_Pictographic}|(^|\s):[a-z0-9_+-]+:(?=\s|$)/u;
 const CONVENTIONAL = /^(feat|fix|chore|docs|refactor|test|tests|style|perf|build|ci|revert)(\([^)]*\))?!?:/i;
 // Files nearly every commit touches for bookkeeping; they say nothing about where the work is.
-const BOOKKEEPING = /(^|\/)(package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|bun\.lockb?|Cargo\.lock|go\.sum|go\.mod|poetry\.lock|Pipfile\.lock|Gemfile\.lock|composer\.lock|package\.json|(README|CHANGELOG|CHANGES|HISTORY|LICENSE|COPYING)(\.(md|txt|rst|markdown))?|\.gitignore)$/i;
+const BOOKKEEPING = /(^|\/)([^/]+-lock\.(json|yaml)|npm-shrinkwrap\.json|[^/]+\.lockb?|Package\.resolved|go\.sum|go\.mod|package\.json|(README|CHANGELOG|CHANGES|HISTORY|LICENSE|COPYING)(\.(md|txt|rst|markdown))?|\.gitignore)$/i;
 
 for (const c of commits) {
   hours[c.hour]++;
@@ -198,7 +203,8 @@ for (const c of commits) {
   if (/\b(wip|tmp|temp|todo|stuff|things|asdf)\b/.test(sl)) wips++;
   if (/^revert/.test(sl)) reverts++;
   if (s.split(/\s+/).length <= 1) oneWord++;
-  if (SWEAR.test(s)) swears++;
+  // "Update shit.txt" names a file, it isn't rage; "fix this shit" in shitty_parser.py still is.
+  if (SWEAR.test(s) && !c.files.some((f) => SWEAR.test(f.file) && s.includes(f.file.split('/').pop()))) swears++;
   if (EMOJI.test(s)) emojis++;
   if (CONVENTIONAL.test(s)) conventional++;
   if (s) repeats.set(sl, [repeats.get(sl)?.[0] || s, (repeats.get(sl)?.[1] || 0) + 1]); // keep the user's own casing
@@ -234,6 +240,7 @@ const peakHour = hours.indexOf(Math.max(...hours));
 const DOW = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const peakDay = DOW[days.indexOf(Math.max(...days.slice(1)))];
 const avgSize = Math.round((totalAdd + totalDel) / n);
+const medianSize = commits.map((c) => c.add + c.del).sort((a, b) => a - b)[Math.floor(n / 2)];
 const avgMsg = Math.round(msgLen / n);
 const langTotal = [...langs.values()].reduce((a, b) => a + b, 0) || 1;
 const topLangs = top(langs, 4).map(([l, v]) => [l, Math.round((v / langTotal) * 100)]);
@@ -284,7 +291,7 @@ const ARCHETYPES = [
     blurb: `${stats.nightOwlPct}% of commits land between midnight and 5am.`,
     roast: 'Your best ideas arrive right after your worst decisions.' },
   { id: 'dawn', emoji: '🌅', name: 'The Dawn Patrol', score: stats.dawnPct / 12,
-    blurb: `${stats.dawnPct}% of commits happen before 8am.`,
+    blurb: `${stats.dawnPct}% of commits happen between 5am and 8am.`,
     roast: 'Shipping before the coffee machine has finished booting.' },
   { id: 'weekend', emoji: '⚔️', name: 'The Weekend Warrior', score: stats.weekendPct / 25,
     blurb: `${stats.weekendPct}% of commits are on Saturday or Sunday.`,
@@ -295,7 +302,7 @@ const ARCHETYPES = [
   { id: 'friday', emoji: '🎲', name: 'The Friday Deployer', score: stats.fridayEveningPct / 10,
     blurb: `${stats.fridayEveningPct}% of commits ship after 4pm on a Friday.`,
     roast: 'Your on-call rotation has filed a restraining order.' },
-  { id: 'mono', emoji: '🧱', name: 'The Monolith Mover', score: avgSize / 350,
+  { id: 'mono', emoji: '🧱', name: 'The Monolith Mover', score: medianSize >= 100 ? avgSize / 350 : 0, // the median gate: one giant import commit doesn't make a monolith
     blurb: `The average commit touches ${avgSize.toLocaleString()} lines.`,
     roast: 'Code review is less "review" and more "hostage negotiation".' },
   { id: 'surgeon', emoji: '🔬', name: 'The Surgeon', score: n >= 30 && avgSize > 0 ? 18 / avgSize : 0,
@@ -307,7 +314,7 @@ const ARCHETYPES = [
   { id: 'ninja', emoji: '🥷', name: 'The Silent Committer', score: stats.oneWordPct / 20,
     blurb: `${stats.oneWordPct}% of commit messages are a single word.`,
     roast: 'Update what? Nobody will ever know.' },
-  { id: 'streak', emoji: '🔥', name: 'The Streak Machine', score: best / 21,
+  { id: 'streak', emoji: '🔥', name: 'The Streak Machine', score: Math.min(best / 21, 2.5), // capped: in a huge repo the streak is just the calendar
     blurb: `Longest streak: ${best} days in a row.`,
     roast: 'Rest days are a rumor to your contribution graph.' },
   { id: 'nine', emoji: '☕', name: 'The 9-to-5 Professional', score: stats.officeHoursPct / 90,
@@ -316,19 +323,19 @@ const ARCHETYPES = [
   { id: 'emoji', emoji: '🎉', name: 'The Emoji Enthusiast', score: n >= 20 ? stats.emojiPct / 12 : 0,
     blurb: `${stats.emojiPct}% of commit messages have an emoji in them.`,
     roast: 'Your commit history has better emoji game than your group chat.' },
-  { id: 'conv', emoji: '📋', name: 'The Conventionalist', score: n >= 20 ? stats.conventionalPct / 60 : 0,
+  { id: 'conv', emoji: '📋', name: 'The Conventionalist', score: n >= 20 && stats.conventionalPct >= 50 ? stats.conventionalPct / 40 : 0,
     blurb: `${stats.conventionalPct}% of commits start with feat:, fix: and friends.`,
     roast: 'feat: add personality. fix: remove personality.' },
-  { id: 'committee', emoji: '🏛️', name: 'The Committee', score: authors.size >= 8 && topAuthorPct <= 60 ? Math.min(authors.size / 12, 2) : 0,
-    blurb: `${authors.size.toLocaleString('en-US')} authors, and the top one wrote just ${topAuthorPct}%.`,
+  { id: 'committee', emoji: '🏛️', name: 'The Committee', score: authors.size >= 8 && topAuthorPct <= 60 ? Math.min(authors.size / 12, 3) : 0,
+    blurb: `${authors.size.toLocaleString('en-US')} authors, and the top one wrote ${topAuthorPct < 50 ? 'just ' : ''}${topAuthorPct}%.`,
     roast: 'Everyone owns this repo, which means nobody does.' },
-  { id: 'comeback', emoji: '🧟', name: 'The Comeback Kid', score: maxGap >= 60 ? Math.min(maxGap / 90, 1.6) : 0, // capped: a year off shouldn't drown out real habits
+  { id: 'comeback', emoji: '🧟', name: 'The Comeback Kid', score: maxGap >= 60 && maxGap >= spanDays * 0.15 ? Math.min(maxGap / 90, 1.6) : 0, // a real slice of the repo's life; capped so a year off can't drown out real habits
     blurb: `Went quiet for ${maxGap.toLocaleString('en-US')} days, then came back.`,
     roast: 'Ghosted your own repo, then came back like nothing happened.' },
   { id: 'crammer', emoji: '⏰', name: 'The Deadline Crammer', score: n >= 15 && dayset.size >= 10 && spanDays >= 14 ? top2DaysPct / 50 : 0, // 10+ days: steady work can't reach 50% on 2 of them
     blurb: `${top2DaysPct}% of all commits happened on just 2 days.`,
     roast: 'Weeks of nothing, then one heroic night before the deadline.' },
-  { id: 'rage', emoji: '🤬', name: 'The Rage Committer', score: swears >= 3 ? pct(swears) / 4 : 0,
+  { id: 'rage', emoji: '🤬', name: 'The Rage Committer', score: swears >= 3 ? Math.min(pct(swears) / 4, 3) : 0,
     blurb: `${swears} commit messages contain a swear word.`,
     roast: 'Your git log is rated R.' },
   { id: 'onefile', emoji: '🗿', name: 'The One-File Wonder', score: n >= 20 && mainFile ? stats.mainFilePct / 60 : 0,
@@ -544,9 +551,10 @@ function copyImage(pngFile) {
   const quiet = { stdio: 'ignore', timeout: 15000 };
   try {
     if (process.platform === 'win32') {
-      const p = pngFile.replace(/'/g, "''");
+      // The path goes in through an env var, so no folder name can break PowerShell's quoting.
       return spawnSync('powershell', ['-NoProfile', '-STA', '-Command',
-        `Add-Type -AssemblyName System.Windows.Forms,System.Drawing; [System.Windows.Forms.Clipboard]::SetImage([System.Drawing.Image]::FromFile('${p}'))`], quiet).status === 0;
+        'Add-Type -AssemblyName System.Windows.Forms,System.Drawing; [System.Windows.Forms.Clipboard]::SetImage([System.Drawing.Image]::FromFile($env:GIT_DNA_PNG))'],
+      { ...quiet, env: { ...process.env, GIT_DNA_PNG: pngFile } }).status === 0;
     }
     if (process.platform === 'darwin') {
       return spawnSync('osascript', ['-e', `set the clipboard to (read (POSIX file "${pngFile.replace(/"/g, '\\"')}") as «class PNGf»)`], quiet).status === 0;
@@ -566,9 +574,14 @@ function openFile(file) {
 const interactive = process.stdout.isTTY && !process.env.CI && !flag('--no-open');
 
 if (!flag('--no-card')) {
-  const file = path.resolve(opt('--out') || 'git-dna.svg');
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, card());
+  // --out card, card.png and card.svg all give card.svg plus card.png.
+  const file = path.resolve(opt('--out') || 'git-dna.svg').replace(/(\.png|\.svg)?$/i, '.svg');
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, card());
+  } catch (e) {
+    fail(`Could not write the card to ${file}: ${e.message}`);
+  }
   const rel = (f) => path.relative(process.cwd(), f) || f;
   out.push('');
   out.push(`  ${green('✔')} card saved → ${bold(rel(file))}`);

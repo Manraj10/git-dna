@@ -158,6 +158,44 @@ test('Rust paths are not emoji, and escape codes never reach the output', () => 
   }
 });
 
+test('in a big team repo the streak is just the calendar, so it is The Committee', () => {
+  const dir = makeRepo(Array.from({ length: 60 }, (_, i) => ({ date: at(i, 15), author: `Person ${i % 36}`, files: { [`t${i}.txt`]: 'x\n'.repeat(40) } })));
+  try {
+    assert.strictEqual(run(dir).archetype.name, 'The Committee');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a swear word in a file name is not rage', () => {
+  const dir = makeRepo(evenings(20, (i) => (i < 5 ? { msg: `Add shit${i}.txt`, files: { [`shit${i}.txt`]: 'x\n' } } : {})));
+  try {
+    assert.strictEqual(run(dir).swears, 0);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('one giant import commit does not make a Monolith Mover', () => {
+  const dir = makeRepo(evenings(20, (i) => (i === 0 ? { files: { 'vendor.js': 'x\n'.repeat(20000) } } : {})));
+  try {
+    assert.notStrictEqual(run(dir).archetype.name, 'The Monolith Mover');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('--out card.png and --since=DATE both work', () => {
+  const dir = makeRepo(evenings(12));
+  try {
+    execFileSync(process.execPath, [CLI, dir, '--since=2000-01-01', '--out', path.join(dir, 'out', 'card.png'), '--no-png', '--no-open'], { stdio: 'ignore' });
+    assert.ok(fs.existsSync(path.join(dir, 'out', 'card.svg')), 'card.svg was not written');
+    assert.ok(!fs.existsSync(path.join(dir, 'out', 'card.png')), 'SVG text was written into card.png');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('lockfiles and READMEs do not make a One-File Wonder', () => {
   const dir = makeRepo(evenings(25, (i) => ({ files: { 'package-lock.json': `{"v":${i}}\n`, 'README.md': `v${i}\n`, [`src/m${i}.js`]: `x\n` } })));
   try {
