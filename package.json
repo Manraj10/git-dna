@@ -1,9 +1,13 @@
 {
   "name": "git-dna",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Reads a repository's commit history and tells you what kind of committer lives there.",
   "bin": {
     "git-dna": "bin/git-dna.js"
+  },
+  "scripts": {
+    "test": "node --test",
+    "prepublishOnly": "node scripts/check-publish.js && node --test"
   },
   "files": [
     "bin"
